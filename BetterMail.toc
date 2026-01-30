@@ -4,5 +4,6 @@
 ## IconTexture: 618858
 ## Notes: Improvements to mail (e.g. auto mailing)
 ## Author: Banksy
+## SavedVariables: BAM_SavedVars
 
 autoMail.xml

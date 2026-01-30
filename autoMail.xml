@@ -16,7 +16,7 @@
                 self:OnEvent(event, ...)
             </OnEvent>
             <OnShow>
-                self:UpdateItemList()
+                self:UpdateItemList(true)
             </OnShow>
         </Scripts>
 
