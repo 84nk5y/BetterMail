@@ -7,14 +7,10 @@
             <Anchor point="TOPLEFT" relativeTo="MailFrameInset" x="4" y="-4"/>
             <Anchor point="BOTTOMRIGHT" relativeTo="MailFrameInset" x="-4" y="4"/>
         </Anchors>
-        
+
         <Scripts>
-            <OnLoad>
-                self:OnLoad()
-            </OnLoad>
-            <OnEvent>
-                self:OnEvent(event, ...)
-            </OnEvent>
+            <OnLoad method="OnLoad"/>
+            <OnEvent method="OnEvent"/>
             <OnShow>
                 self:UpdateItemList(true)
             </OnShow>
