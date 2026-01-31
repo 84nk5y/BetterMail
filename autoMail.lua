@@ -61,10 +61,6 @@ function AutoMailFrameMixin:ToggleItemSelection(item)
     self:UpdateItemList(false)
 end
 
-local function HasMailableBound(bindType)
-    return bindType == Enum.ItemBind.None or bindType == Enum.ItemBind.OnEquip or bindType == Enum.ItemBind.OnUse
-end
-
 function AutoMailFrameMixin:CollectMaillableItemsFromBags()
     self.bagData = {}
 
@@ -76,7 +72,7 @@ function AutoMailFrameMixin:CollectMaillableItemsFromBags()
                 local itemName, itemLink, _, _, _, itemType, itemSubType, _, _, itemTexture, _, _, _, bindType, _, _, isCraftingReagent, _ = C_Item.GetItemInfo(id)
                 local itemLoc = ItemLocation:CreateFromBagAndSlot(bag, slot)
 
-                if (isCraftingReagent or HasMailableBound(bindType)) and not info.isBound then
+                if not info.isBound then
                     if not self.bagData[id] then
                         self.bagData[id] = {
                             ID = id,
@@ -196,6 +192,6 @@ function AutoMailFrameMixin:SendNextBatch()
 
     if itemsAttached > 0 then
         print("|cffB0C4DEAutoMail|r Sending "..itemsAttached.." to "..BAM_SavedVars.TARGET_PLAYER)
-        SendMail(BAM_SavedVars.TARGET_PLAYER, "Bulk Item Export", "")
+        SendMail(BAM_SavedVars.TARGET_PLAYER, "AutoMail package", "")
     end
 end
