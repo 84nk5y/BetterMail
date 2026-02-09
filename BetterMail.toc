@@ -6,4 +6,4 @@
 ## Author: Banksy
 ## SavedVariables: BAM_SavedVars
 
-autoMail.xml
+AutoMail.xml
