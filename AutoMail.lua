@@ -1,12 +1,15 @@
 BAM_SavedVars = {}
 
 local MORE_MAIL_TO_SEND = false
+local MAX_MAIL_ATTACHMENTS = 12
 
 AutoMailFrameMixin = {}
 
 function AutoMailFrameMixin:OnLoad()
     self.bagData = {}
     self.itemRows = {}
+    self.sortedItemIDs = {}
+    self.updatePending = false
     self:RegisterEvent("VARIABLES_LOADED")
     self:RegisterEvent("BAG_UPDATE")
     self:RegisterEvent("MAIL_SHOW")
@@ -17,11 +20,11 @@ end
 
 hooksecurefunc("MailFrameTab_OnClick", function(self, tabID)
     if tabID == 3 then
-        MailFrameInset:SetPoint("TOPLEFT", 4, -58);
-        InboxFrame:Hide();
-        SendMailFrame:Hide();
-        SetSendMailShowing(false);
-        MailFrame:SetTitle("Auto Mail");
+        MailFrameInset:SetPoint("TOPLEFT", 4, -58)
+        InboxFrame:Hide()
+        SendMailFrame:Hide()
+        SetSendMailShowing(false)
+        MailFrame:SetTitle("Auto Mail")
         AutoMailFrame:Show()
     else
         AutoMailFrame:Hide()
@@ -37,12 +40,21 @@ function AutoMailFrameMixin:OnEvent(event, ...)
             BAM_SavedVars.TARGET_PLAYER = "Sales-Draenor"
         end
     elseif event == "MAIL_CLOSED" then
+        MORE_MAIL_TO_SEND = false
         self:Hide()
     elseif event == "MAIL_SEND_SUCCESS" and MORE_MAIL_TO_SEND then
-        -- Delay 2s to let the mail system "breath" before next batch
+        -- Delay 2s to let the mail system "breathe" before next batch
         C_Timer.After(2, function() self:SendNextBatch() end)
     elseif self:IsVisible() then
-        self:UpdateItemList(true)
+        if not self.updatePending then
+            self.updatePending = true
+            C_Timer.After(0.2, function()
+                self.updatePending = false
+                if self:IsVisible() then
+                    self:UpdateItemList(true)
+                end
+            end)
+        end
     end
 end
 
@@ -52,10 +64,10 @@ function AutoMailFrameMixin:ToggleItemSelection(item)
 
     if BAM_SavedVars.ITEM_IDS_TO_SEND[itemID] then
         BAM_SavedVars.ITEM_IDS_TO_SEND[itemID] = nil
-        print("|cffB0C4DEAutoMail|r |cffff0000Removed|r item from list: " .. itemName .. "(".. itemID .. ")")
+        print("|cffB0C4DE[AutoMail]|r |cffff0000Removed|r item from list: "..itemName.."(".. itemID..")")
     else
         BAM_SavedVars.ITEM_IDS_TO_SEND[itemID] = itemName
-        print("|cffB0C4DEAutoMail|r |cff00ff00Added|r item to list: " .. itemName .. "(".. itemID .. ")")
+        print("|cffB0C4DE[AutoMail]|r |cff00ff00Added|r item to list: "..itemName.."(".. itemID..")")
     end
 
     self:UpdateItemList(false)
@@ -67,25 +79,23 @@ function AutoMailFrameMixin:CollectMaillableItemsFromBags()
     for bag = 0, NUM_TOTAL_EQUIPPED_BAG_SLOTS do
         for slot = 1, C_Container.GetContainerNumSlots(bag) do
             local info = C_Container.GetContainerItemInfo(bag, slot)
-            if info and info.itemID then
+            if info and info.itemID and not info.isBound then
                 local id = info.itemID
                 local itemName, itemLink, _, _, _, itemType, itemSubType, _, _, itemTexture, _, _, _, bindType, _, _, isCraftingReagent, _ = C_Item.GetItemInfo(id)
-                local itemLoc = ItemLocation:CreateFromBagAndSlot(bag, slot)
 
-                if not info.isBound then
+                if itemName then
                     if not self.bagData[id] then
                         self.bagData[id] = {
                             ID = id,
                             name = itemName,
-                            bag = bag,
-                            bagSlot = slot,
-                            location = itemLoc,
+                            locations = {},
                             isCraftingReagent = isCraftingReagent,
                             count = 0,
                             texture = itemTexture
                         }
                     end
 
+                    table.insert(self.bagData[id].locations, {bag = bag, slot = slot})
                     self.bagData[id].count = self.bagData[id].count + info.stackCount
                 end
             end
@@ -94,7 +104,7 @@ function AutoMailFrameMixin:CollectMaillableItemsFromBags()
 end
 
 function AutoMailFrameMixin:UpdateItemList(fullScan)
-    self.RecipientText:SetText("Recipient: |cffffffff" .. (BAM_SavedVars.TARGET_PLAYER or "Unknown") .. "|r")
+    self.RecipientText:SetText("Recipient: |cffffffff"..(BAM_SavedVars.TARGET_PLAYER or "Unknown").."|r")
 
     for _, row in ipairs(self.itemRows) do row:Hide() end
 
@@ -109,9 +119,11 @@ function AutoMailFrameMixin:UpdateItemList(fullScan)
         end
         table.insert(sortedIDs, id)
     end
+
+    local bagData = self.bagData
     table.sort(sortedIDs, function(a, b)
-        local itemA = self.bagData[a]
-        local itemB = self.bagData[b]
+        local itemA = bagData[a]
+        local itemB = bagData[b]
         if itemA.isAllowed ~= itemB.isAllowed then
             return itemA.isAllowed
         end
@@ -121,12 +133,14 @@ function AutoMailFrameMixin:UpdateItemList(fullScan)
         return itemA.name < itemB.name
     end)
 
+    self.sortedItemIDs = sortedIDs
+
     local yOffset = 0
     local scrollChild = self.ScrollFrame.Content
     local anyItemsToSend = false
 
     for i, itemID in ipairs(sortedIDs) do
-        local data = self.bagData[itemID]
+        local data = bagData[itemID]
         anyItemsToSend = anyItemsToSend or data.isAllowed
 
         if not self.itemRows[i] then
@@ -172,26 +186,39 @@ end
 function AutoMailFrameMixin:SendNextBatch()
     if not AutoMailFrame:IsVisible() then return end
 
+    local recipient = BAM_SavedVars.TARGET_PLAYER
+    if not recipient or recipient == "" then
+        print("|cffB0C4DE[AutoMail]|r |cffff0000Error:|r No recipient set!")
+        return
+    end
+
     ClearSendMail()
 
     MORE_MAIL_TO_SEND = false
 
     local itemsAttached = 0
-    for id, item in pairs(self.bagData) do
-        if BAM_SavedVars.ITEM_IDS_TO_SEND[id] then
-            itemsAttached = itemsAttached + 1
-            C_Container.PickupContainerItem(item.bag, item.bagSlot)
-            ClickSendMailItemButton(itemsAttached)
 
-            if itemsAttached == 12 then
-                MORE_MAIL_TO_SEND = true
+    for _, id in ipairs(self.sortedItemIDs) do
+        local item = self.bagData[id]
+        if BAM_SavedVars.ITEM_IDS_TO_SEND[id] then
+            for _, loc in ipairs(item.locations) do
+                itemsAttached = itemsAttached + 1
+                C_Container.PickupContainerItem(loc.bag, loc.slot)
+                ClickSendMailItemButton(itemsAttached)
+
+                if itemsAttached == MAX_MAIL_ATTACHMENTS then
+                    MORE_MAIL_TO_SEND = true
+                    break
+                end
+            end
+            if itemsAttached == MAX_MAIL_ATTACHMENTS then
                 break
             end
         end
     end
 
     if itemsAttached > 0 then
-        print("|cffB0C4DEAutoMail|r Sending "..itemsAttached.." to "..BAM_SavedVars.TARGET_PLAYER)
-        SendMail(BAM_SavedVars.TARGET_PLAYER, "AutoMail package", "")
+        print("|cffB0C4DE[AutoMail]|r Sending "..itemsAttached.." item(s) to "..recipient)
+        SendMail(recipient, "AutoMail package", "")
     end
 end
