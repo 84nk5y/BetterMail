@@ -1,4 +1,4 @@
-BAM_SavedVars = {}
+BAM_SavedVars = { Items = {}, Recepient = "Sales-Draenor" }
 
 local MORE_MAIL_TO_SEND = false
 local MAX_MAIL_ATTACHMENTS = 12
@@ -10,7 +10,6 @@ function AutoMailFrameMixin:OnLoad()
     self.itemRows = {}
     self.sortedItemIDs = {}
     self.updatePending = false
-    self:RegisterEvent("VARIABLES_LOADED")
     self:RegisterEvent("BAG_UPDATE")
     self:RegisterEvent("MAIL_SHOW")
     self:RegisterEvent("MAIL_CLOSED")
@@ -32,14 +31,7 @@ hooksecurefunc("MailFrameTab_OnClick", function(self, tabID)
 end)
 
 function AutoMailFrameMixin:OnEvent(event, ...)
-    if event == "VARIABLES_LOADED" then
-        if not BAM_SavedVars.ITEM_IDS_TO_SEND then
-            BAM_SavedVars.ITEM_IDS_TO_SEND = {}
-        end
-        if not BAM_SavedVars.TARGET_PLAYER then
-            BAM_SavedVars.TARGET_PLAYER = "Sales-Draenor"
-        end
-    elseif event == "MAIL_CLOSED" then
+    if event == "MAIL_CLOSED" then
         MORE_MAIL_TO_SEND = false
         self:Hide()
     elseif event == "MAIL_SEND_SUCCESS" and MORE_MAIL_TO_SEND then
@@ -62,11 +54,11 @@ function AutoMailFrameMixin:ToggleItemSelection(item)
     local itemID = item.ID
     local itemName = item.name
 
-    if BAM_SavedVars.ITEM_IDS_TO_SEND[itemID] then
-        BAM_SavedVars.ITEM_IDS_TO_SEND[itemID] = nil
+    if BAM_SavedVars.Items[itemID] then
+        BAM_SavedVars.Items[itemID] = nil
         print("|cffB0C4DE[AutoMail]|r |cffff0000Removed|r item from list: "..itemName.."(".. itemID..")")
     else
-        BAM_SavedVars.ITEM_IDS_TO_SEND[itemID] = itemName
+        BAM_SavedVars.Items[itemID] = itemName
         print("|cffB0C4DE[AutoMail]|r |cff00ff00Added|r item to list: "..itemName.."(".. itemID..")")
     end
 
@@ -104,7 +96,7 @@ function AutoMailFrameMixin:CollectMaillableItemsFromBags()
 end
 
 function AutoMailFrameMixin:UpdateItemList(fullScan)
-    self.RecipientText:SetText("Recipient: |cffffffff"..(BAM_SavedVars.TARGET_PLAYER or "Unknown").."|r")
+    self.RecipientText:SetText("Recipient: |cffffffff"..(BAM_SavedVars.Recepient or "Unknown").."|r")
 
     for _, row in ipairs(self.itemRows) do row:Hide() end
 
@@ -112,7 +104,7 @@ function AutoMailFrameMixin:UpdateItemList(fullScan)
 
     local sortedIDs = {}
     for id, item in pairs(self.bagData) do
-        if BAM_SavedVars.ITEM_IDS_TO_SEND[id] then
+        if BAM_SavedVars.Items[id] then
             item.isAllowed = true
         else
             item.isAllowed = false
@@ -186,7 +178,7 @@ end
 function AutoMailFrameMixin:SendNextBatch()
     if not AutoMailFrame:IsVisible() then return end
 
-    local recipient = BAM_SavedVars.TARGET_PLAYER
+    local recipient = BAM_SavedVars.Recepient
     if not recipient or recipient == "" then
         print("|cffB0C4DE[AutoMail]|r |cffff0000Error:|r No recipient set!")
         return
@@ -200,7 +192,7 @@ function AutoMailFrameMixin:SendNextBatch()
 
     for _, id in ipairs(self.sortedItemIDs) do
         local item = self.bagData[id]
-        if BAM_SavedVars.ITEM_IDS_TO_SEND[id] then
+        if BAM_SavedVars.Items[id] then
             for _, loc in ipairs(item.locations) do
                 itemsAttached = itemsAttached + 1
                 C_Container.PickupContainerItem(loc.bag, loc.slot)
