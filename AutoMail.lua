@@ -63,14 +63,15 @@ function AutoMailFrameMixin:UpdateItemList(fullScan)
 
     local displayList = {}
     for id, item in pairs(self.bagData) do
-        if BAM_SavedVars.Items[id] then item.isAllowed = true end
+        item.isAllowed = (BAM_SavedVars.Items[id] ~= nil)
         table.insert(displayList, item)
     end
 
     table.sort(displayList, function(a, b)
         if a.isAllowed ~= b.isAllowed then return a.isAllowed end
-        if a.isCraftingReagent ~= a.isCraftingReagent then return a.isCraftingReagent end
-        return a.name < b.name
+        if a.isCraftingReagent ~= b.isCraftingReagent then return a.isCraftingReagent end
+        if a.name ~= b.name then return a.name < b.name end
+        return (a.quality or 0) > (b.quality or 0)
     end)
 
     local panel = self
@@ -84,8 +85,33 @@ function AutoMailFrameMixin:UpdateItemList(fullScan)
         entry.layoutIndex = i
         entry.item = data
 
+        if data.rarity then
+            local r, g, b = C_Item.GetItemQualityColor(data.rarity)
+            entry.IconBorder:SetVertexColor(r, g, b)
+            entry.IconBorder:Show()
+        else
+            entry.IconBorder:Hide()
+        end
+
+        entry.Icon:SetTexture(data.texture)
+
+        if data.quality then
+            entry.QualityOverlay:SetAtlas(string.format("Professions-Icon-Quality-Tier%d-Inv", data.quality));
+            entry.QualityOverlay:Show()
+        else
+            entry.QualityOverlay:Hide()
+        end
+
+        if data.count > 1 then
+            entry.Quantity:SetText(data.count)
+            entry.Quantity:Show()
+            entry.Quantity:SetScale(0.7)
+        else
+            entry.Quantity:Hide()
+        end
+
         local color = data.isAllowed and "|cffffffff" or "|cff808080"
-        entry.Text:SetText(string.format("|T%s:14:14:0:0|t %s%s (x%d)|r", data.texture or 134400, color, data.name or "Loading...", data.count))
+        entry.Text:SetText(string.format("%s%s|r", color, data.name))
 
         entry:SetScript("OnClick", function(self)
             if IsShiftKeyDown() then
@@ -99,9 +125,7 @@ function AutoMailFrameMixin:UpdateItemList(fullScan)
             GameTooltip:Show()
         end)
 
-        entry:SetScript("OnLeave", function()
-            GameTooltip:Hide()
-        end)
+        entry:SetScript("OnLeave", GameTooltip_Hide)
 
         entry:Show()
     end
@@ -139,7 +163,8 @@ function AutoMailFrameMixin:CollectMaillableItemsFromBags()
             if info and info.itemID and not info.isBound then
                 local id = info.itemID
                 if not self.bagData[id] then
-                    local itemName, itemLink, _, _, _, itemType, itemSubType, _, _, itemTexture, _, _, _, bindType, _, _, isCraftingReagent, _ = C_Item.GetItemInfo(id)
+                    local itemName, itemLink, rarity, _, _, itemType, itemSubType, _, _, itemTexture, _, _, _, bindType, _, _, isCraftingReagent, _ = C_Item.GetItemInfo(id)
+                    local quality = (isCraftingReagent and C_TradeSkillUI.GetItemReagentQualityByItemInfo(id)) or nil
 
                     self.bagData[id] = {
                         ID = id,
@@ -147,6 +172,8 @@ function AutoMailFrameMixin:CollectMaillableItemsFromBags()
                         locations = {},
                         isCraftingReagent = isCraftingReagent,
                         count = 0,
+                        rarity = rarity,
+                        quality = quality,
                         texture = itemTexture
                     }
                 end
