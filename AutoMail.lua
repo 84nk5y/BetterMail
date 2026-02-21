@@ -1,15 +1,14 @@
 BAM_SavedVars = BAM_SavedVars or { Items = {}, Recipient = "Sales-Draenor" }
 
-local MORE_MAIL_TO_SEND = false
 local MAX_MAIL_ATTACHMENTS = 12
 
 AutoMailFrameMixin = {}
 
 function AutoMailFrameMixin:OnLoad()
     self.bagData = {}
-    self.itemRows = {}
     self.sortedItemIDs = {}
     self.updatePending = false
+    self.moreMailToSend = false
 
     self:RegisterEvent("BAG_UPDATE")
     self:RegisterEvent("MAIL_SHOW")
@@ -35,10 +34,10 @@ end)
 
 function AutoMailFrameMixin:OnEvent(event, ...)
     if event == "MAIL_CLOSED" then
-        MORE_MAIL_TO_SEND = false
+        self.moreMailToSend = false
         self:Hide()
-    elseif event == "MAIL_SEND_SUCCESS" and MORE_MAIL_TO_SEND then
-        C_Timer.After(1.5, function() self:SendNextBatch() end)
+    elseif event == "MAIL_SEND_SUCCESS" and self.moreMailToSend then
+        C_Timer.After(1.5, function() self:SendMailBatch() end)
     elseif self:IsVisible() then
         if not self.updatePending then
             self.updatePending = true
@@ -48,6 +47,72 @@ function AutoMailFrameMixin:OnEvent(event, ...)
             end)
         end
     end
+end
+
+function AutoMailFrameMixin:UpdateItemList(fullScan)
+    if fullScan then self:CollectMaillableItemsFromBags() end
+
+    self.RecipientText:SetText("Recipient: |cffffffff"..(BAM_SavedVars.Recipient or "Unknown").."|r")
+
+    local container = self.ScrollFrame.Content
+
+    if not self.pool then
+        self.pool = CreateFramePool("Button", container, "AutoMailEntryTemplate")
+    end
+    self.pool:ReleaseAll()
+
+    local displayList = {}
+    for id, item in pairs(self.bagData) do
+        if BAM_SavedVars.Items[id] then item.isAllowed = true end
+        table.insert(displayList, item)
+    end
+
+    table.sort(displayList, function(a, b)
+        if a.isAllowed ~= b.isAllowed then return a.isAllowed end
+        if a.isCraftingReagent ~= a.isCraftingReagent then return a.isCraftingReagent end
+        return a.name < b.name
+    end)
+
+    local panel = self
+    local anyItemsToSend = false
+
+    for i, data in ipairs(displayList) do
+        anyItemsToSend = anyItemsToSend or data.isAllowed
+
+        local entry = self.pool:Acquire()
+
+        entry.layoutIndex = i
+        entry.item = data
+
+        local color = data.isAllowed and "|cffffffff" or "|cff808080"
+        entry.Text:SetText(string.format("|T%s:14:14:0:0|t %s%s (x%d)|r", data.texture or 134400, color, data.name or "Loading...", data.count))
+
+        entry:SetScript("OnClick", function(self)
+            if IsShiftKeyDown() then
+                panel:ToggleItemSelection(self.item)
+            end
+        end)
+
+        entry:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_TOPRIGHT")
+            GameTooltip:SetItemByID(self.item.ID)
+            GameTooltip:Show()
+        end)
+
+        entry:SetScript("OnLeave", function()
+            GameTooltip:Hide()
+        end)
+
+        entry:Show()
+    end
+
+    container:Layout()
+    container:Show()
+
+    self.ScrollFrame:UpdateScrollChildRect()
+
+    self.SendButton:SetEnabled(anyItemsToSend)
+    self.SendButton:SetText(anyItemsToSend and "Send All Items" or "No Items to Send")
 end
 
 function AutoMailFrameMixin:ToggleItemSelection(item)
@@ -92,57 +157,7 @@ function AutoMailFrameMixin:CollectMaillableItemsFromBags()
     end
 end
 
-function AutoMailFrameMixin:UpdateItemList(fullScan)
-    if fullScan then self:CollectMaillableItemsFromBags() end
-
-    self.RecipientText:SetText("Recipient: |cffffffff"..(BAM_SavedVars.Recipient or "Unknown").."|r")
-
-    local container = self.ScrollFrame.Content
-    for _, row in ipairs(self.itemRows) do row:Hide() end
-
-    local displayList = {}
-    for id, item in pairs(self.bagData) do
-        if BAM_SavedVars.Items[id] then item.isAllowed = true end
-        table.insert(displayList, item)
-    end
-
-    table.sort(displayList, function(a, b)
-        if a.isAllowed ~= b.isAllowed then return a.isAllowed end
-        if a.isCraftingReagent ~= a.isCraftingReagent then return a.isCraftingReagent end
-        return a.name < b.name
-    end)
-
-    local anyItemsToSend = false
-    for i, data in ipairs(displayList) do
-        anyItemsToSend = anyItemsToSend or data.isAllowed
-        if not self.itemRows[i] then
-            local rb = CreateFrame("Button", nil, container)
-            rb.layoutIndex = i
-            rb:SetSize(260, 20)
-            rb:SetHighlightTexture("Interface\\Buttons\\UI-Listbox-Highlight")
-            rb.Text = rb:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            rb.Text:SetPoint("LEFT", 5, 0)
-            rb:SetScript("OnClick", function(rb) if IsShiftKeyDown() then self:ToggleItemSelection(rb.item) end end)
-            self.itemRows[i] = rb
-        end
-
-        local row = self.itemRows[i]
-        row.item = data
-        local color = data.isAllowed and "|cffffffff" or "|cff808080"
-        row.Text:SetText(string.format("|T%s:14:14:0:0|t %s%s (x%d)|r", data.texture or 134400, color, data.name or "Loading...", data.count))
-        row:Show()
-    end
-
-    container:Layout()
-    container:Show()
-
-    self.ScrollFrame:UpdateScrollChildRect()
-
-    self.SendButton:SetEnabled(anyItemsToSend)
-    self.SendButton:SetText(anyItemsToSend and "Send All Items" or "No Items to Send")
-end
-
-function AutoMailFrameMixin:SendNextBatch()
+function AutoMailFrameMixin:SendMailBatch()
     if not self:IsVisible() then return end
 
     local recipient = BAM_SavedVars.Recipient
@@ -153,7 +168,7 @@ function AutoMailFrameMixin:SendNextBatch()
 
     ClearSendMail()
     local itemsAttached = 0
-    MORE_MAIL_TO_SEND = false
+    self.moreMailToSend = false
 
     for id, _ in pairs(BAM_SavedVars.Items) do
         local item = self.bagData[id]
@@ -164,12 +179,12 @@ function AutoMailFrameMixin:SendNextBatch()
                     ClickSendMailItemButton(itemsAttached + 1)
                     itemsAttached = itemsAttached + 1
                 else
-                    MORE_MAIL_TO_SEND = true
+                    self.moreMailToSend = true
                     break
                 end
             end
         end
-        if MORE_MAIL_TO_SEND then break end
+        if self.moreMailToSend then break end
     end
 
     if itemsAttached > 0 then

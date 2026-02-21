@@ -1,6 +1,20 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
     <Script file="AutoMail.lua"/>
 
+    <Button name="AutoMailTab" parent="MailFrame" inherits="FriendsFrameTabTemplate" id="3" text="Auto Mail">
+        <Anchors>
+            <Anchor point="LEFT" relativeTo="MailFrameTab2" relativePoint="RIGHT" x="-16" y="0"/>
+        </Anchors>
+        <Scripts>
+            <OnLoad>
+                PanelTemplates_SetNumTabs(MailFrame, 3)
+            </OnLoad>
+            <OnClick>
+                MailFrameTab_OnClick(self, 3)
+            </OnClick>
+        </Scripts>
+    </Button>
+
     <Frame name="AutoMailFrame" hidden="true" parent="MailFrame" mixin="AutoMailFrameMixin">
         <Anchors>
             <Anchor point="TOPLEFT" relativeTo="MailFrameInset" x="4" y="-4"/>
@@ -52,17 +66,25 @@
         </Frames>
     </Frame>
 
-    <Button name="AutoMailTab" parent="MailFrame" inherits="FriendsFrameTabTemplate" id="3" text="Auto Mail">
-        <Anchors>
-            <Anchor point="LEFT" relativeTo="MailFrameTab2" relativePoint="RIGHT" x="-16" y="0"/>
-        </Anchors>
-        <Scripts>
-            <OnLoad>
-                PanelTemplates_SetNumTabs(MailFrame, 3)
-            </OnLoad>
-            <OnClick>
-                MailFrameTab_OnClick(self, 3)
-            </OnClick>
-        </Scripts>
+    <Button name="AutoMailEntryTemplate" virtual="true">
+        <Size x="260" y="20"/>
+        <KeyValues>
+            <KeyValue key="layoutIndex" value="1" type="number"/>
+        </KeyValues>
+        <Layers>
+            <Layer level="ARTWORK">
+                <Texture parentKey="Icon">
+                    <Anchors>
+                        <Anchor point="LEFT"/>
+                    </Anchors>
+                </Texture>
+                <FontString parentKey="Text" inherits="GameFontNormalSmallLeft" justifyH="LEFT" maxLines="1">
+                    <Anchors>
+                        <Anchor point="LEFT" relativeKey="$parent.Icon" relativePoint="RIGHT" x="5" y="0"/>
+                    </Anchors>
+                </FontString>
+            </Layer>
+        </Layers>
+        <HighlightTexture file="Interface\Buttons\UI-Listbox-Highlight" alphaMode="ADD"/>
     </Button>
 </Ui>
