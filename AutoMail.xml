@@ -1,5 +1,4 @@
-<Ui xmlns="http://www.blizzard.com/wow/ui/"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
     <Script file="AutoMail.lua"/>
 
     <Frame name="AutoMailFrame" hidden="true" parent="MailFrame" mixin="AutoMailFrameMixin">
@@ -7,7 +6,6 @@
             <Anchor point="TOPLEFT" relativeTo="MailFrameInset" x="4" y="-4"/>
             <Anchor point="BOTTOMRIGHT" relativeTo="MailFrameInset" x="-4" y="4"/>
         </Anchors>
-
         <Scripts>
             <OnLoad method="OnLoad"/>
             <OnEvent method="OnEvent"/>
@@ -15,34 +13,35 @@
                 self:UpdateItemList(true)
             </OnShow>
         </Scripts>
-
         <Layers>
             <Layer level="ARTWORK">
-                <FontString parentKey="RecipientText" inherits="GameFontNormalLarge">
+                <FontString parentKey="RecipientText" inherits="GameFontNormalLarge" justifyH="LEFT">
                     <Anchors>
-                        <Anchor point="TOP" x="0" y="-20"/>
+                        <Anchor point="TOPLEFT" x="15" y="-15"/>
                     </Anchors>
                 </FontString>
             </Layer>
         </Layers>
-
         <Frames>
             <ScrollFrame parentKey="ScrollFrame" inherits="UIPanelScrollFrameTemplate">
                 <Anchors>
-                    <Anchor point="TOPLEFT" x="10" y="-50"/>
-                    <Anchor point="BOTTOMRIGHT" x="-30" y="50"/>
+                    <Anchor point="TOPLEFT" relativeKey="$parent.RecipientText" relativePoint="BOTTOMLEFT" x="0" y="-10"/>
+                    <Anchor point="BOTTOMRIGHT" x="-30" y="60"/>
                 </Anchors>
                 <ScrollChild>
-                    <Frame parentKey="Content">
+                    <Frame parentKey="Content" inherits="VerticalLayoutFrame">
                         <Size x="280" y="1"/>
+                        <KeyValues>
+                            <KeyValue key="spacing" value="2" type="number"/>
+                        </KeyValues>
                     </Frame>
                 </ScrollChild>
             </ScrollFrame>
 
-            <Button parentKey="SendButton" inherits="UIPanelButtonTemplate" text="Send All">
-                <Size x="120" y="30"/>
+            <Button parentKey="SendButton" inherits="UIPanelButtonTemplate" text="Send All Items">
+                <Size x="160" y="30"/>
                 <Anchors>
-                    <Anchor point="BOTTOM" x="0" y="10"/>
+                    <Anchor point="BOTTOM" x="0" y="15"/>
                 </Anchors>
                 <Scripts>
                     <OnClick>
@@ -62,7 +61,7 @@
                 PanelTemplates_SetNumTabs(MailFrame, 3)
             </OnLoad>
             <OnClick>
-                MailFrameTab_OnClick(self, 3);
+                MailFrameTab_OnClick(self, 3)
             </OnClick>
         </Scripts>
     </Button>
