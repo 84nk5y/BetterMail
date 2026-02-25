@@ -59,7 +59,7 @@
                 </Anchors>
                 <Scripts>
                     <OnClick>
-                        self:GetParent():SendNextBatch()
+                        self:GetParent():SendMailBatch()
                     </OnClick>
                 </Scripts>
             </Button>
