@@ -102,10 +102,16 @@ function AutoMailFrameMixin:UpdateItemList(fullScan)
 
         entry.Icon:SetTexture(data.texture)
 
-        if data.quality then
-            entry.QualityOverlay:SetAtlas(string.format("Professions-Icon-Quality-Tier%d-Inv", data.quality))
+        if data.qualityInfo then
+            if not entry.QualityOverlay then
+                entry.QualityOverlay = entry:CreateTexture(nil, "OVERLAY");
+                entry.QualityOverlay:SetPoint("TOPLEFT", -2, 2);
+                entry.QualityOverlay:SetDrawLayer("OVERLAY", 7);
+            end
+
+            entry.QualityOverlay:SetAtlas(data.qualityInfo.iconInventory, TextureKitConstants.UseAtlasSize);
             entry.QualityOverlay:Show()
-        else
+        elseif entry.QualityOverlay then
             entry.QualityOverlay:Hide()
         end
 
@@ -184,6 +190,7 @@ function AutoMailFrameMixin:CollectMaillableItemsFromBags()
 
                     if itemName then
                         local quality = isCraftingReagent and C_TradeSkillUI.GetItemReagentQualityByItemInfo(id) or nil
+                        local qualityInfo = isCraftingReagent and C_TradeSkillUI.GetItemReagentQualityInfo(id) or nil
                         self.bagData[id] = {
                             ID = id,
                             name = itemName,
@@ -192,6 +199,7 @@ function AutoMailFrameMixin:CollectMaillableItemsFromBags()
                             count = 0,
                             rarity = rarity,
                             quality = quality,
+                            qualityInfo = qualityInfo,
                             texture = itemTexture,
                         }
                     end
