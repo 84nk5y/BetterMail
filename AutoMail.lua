@@ -1,3 +1,5 @@
+local ADDON_NAME, _ = ...
+
 BAM_SavedVars = BAM_SavedVars or { Items = {}, Recipient = "Sales-Draenor" }
 
 local MAX_MAIL_ATTACHMENTS = 12
@@ -12,7 +14,7 @@ function AutoMailFrameMixin:OnLoad()
     self.moreMailToSend = false
     self.isSending = false
 
-    self:RegisterEvent("BAG_UPDATE")
+    self:RegisterEvent("BAG_UPDATE_DELAYED")
     self:RegisterEvent("MAIL_SHOW")
     self:RegisterEvent("MAIL_CLOSED")
     self:RegisterEvent("MAIL_SEND_SUCCESS")
@@ -45,7 +47,7 @@ function AutoMailFrameMixin:OnEvent(event, ...)
         else
             self.isSending = false
         end
-    elseif self:IsVisible() then
+    elseif self:IsVisible() and (event == "MAIL_SHOW" or event == "BAG_UPDATE_DELAYED") then
         if not self.updatePending then
             self.updatePending = true
             C_Timer.After(0.3, function()
@@ -92,8 +94,8 @@ function AutoMailFrameMixin:UpdateItemList(fullScan)
         entry.layoutIndex = i
         entry.item = data
 
-        if data.rarity then
-            local r, g, b = C_Item.GetItemQualityColor(data.rarity)
+        if data.quality then
+            local r, g, b = C_Item.GetItemQualityColor(data.quality)
             entry.IconBorder:SetVertexColor(r, g, b)
             entry.IconBorder:Show()
         else
@@ -102,14 +104,14 @@ function AutoMailFrameMixin:UpdateItemList(fullScan)
 
         entry.Icon:SetTexture(data.texture)
 
-        if data.qualityInfo then
+        if data.craftingQualityInfo then
             if not entry.QualityOverlay then
-                entry.QualityOverlay = entry:CreateTexture(nil, "OVERLAY");
-                entry.QualityOverlay:SetPoint("TOPLEFT", -2, 2);
-                entry.QualityOverlay:SetDrawLayer("OVERLAY", 7);
+                entry.QualityOverlay = entry:CreateTexture(nil, "OVERLAY")
+                entry.QualityOverlay:SetPoint("TOPLEFT", -2, 2)
+                entry.QualityOverlay:SetDrawLayer("OVERLAY", 7)
             end
 
-            entry.QualityOverlay:SetAtlas(data.qualityInfo.iconInventory, TextureKitConstants.UseAtlasSize);
+            entry.QualityOverlay:SetAtlas(data.craftingQualityInfo.iconInventory, TextureKitConstants.UseAtlasSize)
             entry.QualityOverlay:Show()
         elseif entry.QualityOverlay then
             entry.QualityOverlay:Hide()
@@ -166,10 +168,10 @@ function AutoMailFrameMixin:ToggleItemSelection(item)
 
     if BAM_SavedVars.Items[itemID] then
         BAM_SavedVars.Items[itemID] = nil
-        print("|cffB0C4DE[AutoMail]|r |cffff0000Removed|r item from list: "..itemName.."(".. itemID..")")
+        print("|cffB0C4DE["..ADDON_NAME.."]|r |cffff0000Removed|r item from list: "..itemName.." ("..itemID..")")
     else
         BAM_SavedVars.Items[itemID] = itemName
-        print("|cffB0C4DE[AutoMail]|r |cff00ff00Added|r item to list: "..itemName.."(".. itemID..")")
+        print("|cffB0C4DE["..ADDON_NAME.."]|r |cff00ff00Added|r item to list: "..itemName.." ("..itemID..")")
     end
 
     self:UpdateItemList(false)
@@ -183,30 +185,28 @@ function AutoMailFrameMixin:CollectMaillableItemsFromBags()
             local info = C_Container.GetContainerItemInfo(bag, slot)
             if info and info.itemID and not info.isBound then
                 local id = info.itemID
-                local stackCount = info.stackCount
+                local link = info.hyperlink
 
                 if not self.bagData[id] then
-                    local itemName, _, rarity, _, _, _, _, _, _, itemTexture, _, _, _, _, _, _, isCraftingReagent = C_Item.GetItemInfo(id)
+                    local _, _, _, _, _, _, _, _, _, itemTexture, _, _, _, _, _, _, isCraftingReagent = C_Item.GetItemInfo(link)
+                    local craftingQualityInfo = isCraftingReagent and C_TradeSkillUI.GetItemReagentQualityInfo(id) or nil
 
-                    if itemName then
-                        local quality = isCraftingReagent and C_TradeSkillUI.GetItemReagentQualityByItemInfo(id) or nil
-                        local qualityInfo = isCraftingReagent and C_TradeSkillUI.GetItemReagentQualityInfo(id) or nil
-                        self.bagData[id] = {
-                            ID = id,
-                            name = itemName,
-                            locations = {},
-                            isCraftingReagent = isCraftingReagent,
-                            count = 0,
-                            rarity = rarity,
-                            quality = quality,
-                            qualityInfo = qualityInfo,
-                            texture = itemTexture,
-                        }
-                    end
+                    self.bagData[id] = {
+                        ID = id,
+                        name = info.itemName,
+                        locations = {},
+                        isCraftingReagent = isCraftingReagent,
+                        count = 0,
+                        quality = info.quality,
+                        craftingQualityInfo = craftingQualityInfo,
+                        texture = itemTexture
+                    }
                 end
 
-                table.insert(self.bagData[id].locations, { bag = bag, slot = slot })
-                self.bagData[id].count = self.bagData[id].count + stackCount
+                if self.bagData[id] then
+                    table.insert(self.bagData[id].locations, { bag = bag, slot = slot })
+                    self.bagData[id].count = self.bagData[id].count + info.stackCount
+                end
             end
         end
     end
@@ -220,7 +220,7 @@ function AutoMailFrameMixin:SendMailBatch()
 
     local recipient = BAM_SavedVars.Recipient
     if not recipient or recipient == "" then
-        print("|cffB0C4DE[AutoMail]|r |cffff0000Error:|r No recipient set!")
+        print("|cffB0C4DE["..ADDON_NAME.."]|r |cffff0000Error:|r No recipient set!")
         self.isSending = false
         return
     end
