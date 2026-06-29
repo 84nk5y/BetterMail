@@ -5,23 +5,6 @@ BAM_SavedVars = BAM_SavedVars or { Items = {}, Recipient = "Sales-Draenor" }
 local MAX_MAIL_ATTACHMENTS = 12
 local BATCH_SEND_DELAY = 1.5
 
-AutoMailFrameMixin = {}
-
-function AutoMailFrameMixin:OnLoad()
-    self.bagData = {}
-    self.sortedItemIDs = {}
-    self.updatePending = false
-    self.moreMailToSend = false
-    self.isSending = false
-
-    self:RegisterEvent("BAG_UPDATE_DELAYED")
-    self:RegisterEvent("MAIL_SHOW")
-    self:RegisterEvent("MAIL_CLOSED")
-    self:RegisterEvent("MAIL_SEND_SUCCESS")
-
-    self.RecipientText:SetTextColor(NORMAL_FONT_COLOR:GetRGB())
-end
-
 hooksecurefunc("MailFrameTab_OnClick", function(self, tabID)
     if tabID == 3 then
         MailFrameInset:SetPoint("TOPLEFT", 4, -58)
@@ -36,6 +19,44 @@ hooksecurefunc("MailFrameTab_OnClick", function(self, tabID)
     end
 end)
 
+AutoMailFrameMixin = {}
+
+function AutoMailFrameMixin:OnLoad()
+    self.bagData = {}
+    self.sortedItemIDs = {}
+    self.updatePending = false
+    self.renderingPending = false
+    self.moreMailToSend = false
+    self.isSending = false
+
+    self:RegisterEvent("BAG_UPDATE_DELAYED")
+    self:RegisterEvent("MAIL_SHOW")
+    self:RegisterEvent("MAIL_CLOSED")
+    self:RegisterEvent("MAIL_SEND_SUCCESS")
+
+    self.RecipientText:SetTextColor(NORMAL_FONT_COLOR:GetRGB())
+end
+
+function AutoMailFrameMixin:TriggerUpdate()
+    if self.updatePending then return end
+
+    self.updatePending = true
+    C_Timer.After(0.1, function()
+        self.updatePending = false
+        self:UpdateItemList()
+    end)
+end
+
+function AutoMailFrameMixin:TriggerRendering()
+    if self.renderingPending then return end
+
+    self.renderingPending = true
+    C_Timer.After(0.1, function()
+        self.renderingPending = false
+        self:RenderListElements()
+    end)
+end
+
 function AutoMailFrameMixin:OnEvent(event, ...)
     if event == "MAIL_CLOSED" then
         self.moreMailToSend = false
@@ -48,19 +69,71 @@ function AutoMailFrameMixin:OnEvent(event, ...)
             self.isSending = false
         end
     elseif self:IsVisible() and (event == "MAIL_SHOW" or event == "BAG_UPDATE_DELAYED") then
-        if not self.updatePending then
-            self.updatePending = true
-            C_Timer.After(0.3, function()
-                self.updatePending = false
-                if self:IsVisible() then self:UpdateItemList(true) end
-            end)
-        end
+       self:TriggerUpdate()
     end
 end
 
-function AutoMailFrameMixin:UpdateItemList(fullScan)
-    if fullScan then self:CollectMaillableItemsFromBags() end
+function AutoMailFrameMixin:UpdateItemList()
+    if self.isSending then return end
 
+    local container = ContinuableContainer:Create()
+
+    local uniqueBagItems = {}
+
+    for bag = 0, NUM_TOTAL_EQUIPPED_BAG_SLOTS do
+        for slot = 1, C_Container.GetContainerNumSlots(bag) do
+            local info = C_Container.GetContainerItemInfo(bag, slot)
+            if info and info.itemID and info.hyperlink and not info.isBound then
+                local link = info.hyperlink
+
+                if not uniqueBagItems[link] then
+                    uniqueBagItems[link] = {
+                        itemID = info.itemID,
+                        itemName = info.itemName,
+                        quality = info.quality,
+                        hyperlink = link,
+                        stackCount = 0,
+                        locations = {}
+                    }
+                    container:AddContinuable(Item:CreateFromItemID(info.itemID))
+                end
+
+                table.insert(uniqueBagItems[link].locations, { bag = bag, slot = slot })
+                uniqueBagItems[link].stackCount = uniqueBagItems[link].stackCount + info.stackCount
+            end
+        end
+    end
+
+    container:ContinueOnLoad(function()
+        self:ProcessBagData(uniqueBagItems)
+        self:TriggerRendering()
+    end)
+end
+
+function AutoMailFrameMixin:ProcessBagData(uniqueBagItems)
+    self.bagData = {}
+
+    for link, info in pairs(uniqueBagItems) do
+        local id = info.itemID
+
+        local _, _, _, _, _, _, _, _, _, itemTexture, _, _, _, _, _, _, isCraftingReagent = C_Item.GetItemInfo(link)
+        local craftingQualityInfo = isCraftingReagent and C_TradeSkillUI.GetItemReagentQualityInfo(id) or nil
+
+        self.bagData[id] = {
+            ID = id,
+            link = link,
+            name = info.itemName,
+            locations = info.locations,
+            isCraftingReagent = isCraftingReagent,
+            count = info.stackCount,
+            quality = info.quality,
+            craftingQualityInfo = craftingQualityInfo,
+            texture = itemTexture
+        }
+    end
+end
+
+function AutoMailFrameMixin:RenderListElements()
     self.RecipientText:SetText("Recipient: |cffffffff"..(BAM_SavedVars.Recipient or "Unknown").."|r")
 
     local container = self.ScrollFrame.Content
@@ -174,43 +247,9 @@ function AutoMailFrameMixin:ToggleItemSelection(item)
         print("|cffB0C4DE["..ADDON_NAME.."]|r |cff00ff00Added|r item to list: "..itemName.." ("..itemID..")")
     end
 
-    self:UpdateItemList(false)
+    self:TriggerRendering()
 end
 
-function AutoMailFrameMixin:CollectMaillableItemsFromBags()
-    self.bagData = {}
-
-    for bag = 0, NUM_TOTAL_EQUIPPED_BAG_SLOTS do
-        for slot = 1, C_Container.GetContainerNumSlots(bag) do
-            local info = C_Container.GetContainerItemInfo(bag, slot)
-            if info and info.itemID and not info.isBound then
-                local id = info.itemID
-                local link = info.hyperlink
-
-                if not self.bagData[id] then
-                    local _, _, _, _, _, _, _, _, _, itemTexture, _, _, _, _, _, _, isCraftingReagent = C_Item.GetItemInfo(link)
-                    local craftingQualityInfo = isCraftingReagent and C_TradeSkillUI.GetItemReagentQualityInfo(id) or nil
-
-                    self.bagData[id] = {
-                        ID = id,
-                        name = info.itemName,
-                        locations = {},
-                        isCraftingReagent = isCraftingReagent,
-                        count = 0,
-                        quality = info.quality,
-                        craftingQualityInfo = craftingQualityInfo,
-                        texture = itemTexture
-                    }
-                end
-
-                if self.bagData[id] then
-                    table.insert(self.bagData[id].locations, { bag = bag, slot = slot })
-                    self.bagData[id].count = self.bagData[id].count + info.stackCount
-                end
-            end
-        end
-    end
-end
 
 function AutoMailFrameMixin:SendMailBatch()
     if not self:IsVisible() then
@@ -224,8 +263,6 @@ function AutoMailFrameMixin:SendMailBatch()
         self.isSending = false
         return
     end
-
-    self:CollectMaillableItemsFromBags()
 
     ClearCursor()
     ClearSendMail()
@@ -258,10 +295,10 @@ function AutoMailFrameMixin:SendMailBatch()
 
     if itemsAttached > 0 then
         local suffix = self.moreMailToSend and " (more to follow...)" or ""
-        print("|cffB0C4DE[AutoMail]|r Sending "..itemsAttached.." item(s) to "..recipient..suffix)
+        print("|cffB0C4DE["..ADDON_NAME.."]|r Sending "..itemsAttached.." item(s) to "..recipient..suffix)
         SendMail(recipient, "AutoMail package", "")
     else
         self.isSending = false
-        print("|cffB0C4DE[AutoMail]|r Nothing left to send.")
+        print("|cffB0C4DE["..ADDON_NAME.."]|r Nothing left to send.")
     end
 end
