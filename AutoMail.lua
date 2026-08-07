@@ -38,7 +38,7 @@ function AutoMailFrameMixin:OnLoad()
 end
 
 function AutoMailFrameMixin:TriggerUpdate()
-    if self.updatePending then return end
+    if self.updatePending or not self:IsVisible() then return end
 
     self.updatePending = true
     C_Timer.After(0.1, function()
@@ -48,7 +48,7 @@ function AutoMailFrameMixin:TriggerUpdate()
 end
 
 function AutoMailFrameMixin:TriggerRendering()
-    if self.renderingPending then return end
+    if self.renderingPending or not self:IsVisible() then return end
 
     self.renderingPending = true
     C_Timer.After(0.1, function()
